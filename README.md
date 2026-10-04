@@ -66,26 +66,48 @@ run. To skip this, pass `--skip-extension-check`.
 
 ## Usage
 
-```sh
-python3 create_agent_apps.py --org <your-org> agents.txt
-```
-
 For each agent, `gh` will open a browser tab asking you to confirm the
 app creation on GitHub. Click through and the script will continue
 with the next agent. Credentials for each app land in
 `.creds/<full-name>.env`.
 
-To preview what would run without opening any browser tabs:
+To preview what would run without opening any browser tabs, add
+`--dry-run`.
+
+**Batch from a file:**
 
 ```sh
-python3 create_agent_apps.py --org <your-org> --dry-run agents.txt
+python3 create_agent_apps.py --org <your-org> agents.txt
 ```
+
+**Batch from stdin** (e.g. from another script or a `kubectl get` style
+list of names):
+
+```sh
+printf 'forge\natlas\norion\n' | python3 create_agent_apps.py --org <your-org> -
+```
+
+**Single agent:**
+
+```sh
+python3 create_agent_apps.py --org <your-org> --agent forge
+```
+
+**Single agent from stdin** (useful in pipelines):
+
+```sh
+echo forge | python3 create_agent_apps.py --org <your-org> --agent -
+```
+
+`--agent` and the positional `agents_file` argument are mutually
+exclusive. In either position, pass `-` to read from stdin.
 
 ## Flags
 
 | Flag | Description |
 | --- | --- |
-| `agents_file` (positional) | Path to the agents list file. |
+| `agents_file` (positional, optional) | Path to a file with one agent name per line. Lines starting with `#` and blank lines are ignored. Pass `-` to read from stdin. |
+| `--agent` | Create a single app for this agent name instead of reading from a file. Pass `-` to read the name from stdin. Mutually exclusive with `agents_file`. |
 | `--org` (required) | GitHub organization slug to create the apps in. |
 | `--prefix` | String prepended to every agent name to form the GitHub App name. Useful for guaranteeing uniqueness across all of GitHub. Example: `--prefix cs-` turns `hermes-1` into `cs-hermes-1`. Default: no prefix. |
 | `--preset` | `gh app-create` preset to use. Default: `opencode`. |

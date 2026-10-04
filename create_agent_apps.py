@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Create one GitHub App per hermes agent using the kennyg/gh-app-create extension.
+"""Create one GitHub App per agent in your fleet using the kennyg/gh-app-create
+extension.
 
-The list of agent names is read from a file (one per line; lines starting
-with '#' and blank lines are ignored). For each agent, the script invokes
-``gh app-create create`` which opens a browser tab to confirm creation on
-GitHub, then writes the resulting credentials (app id, private key, client
-id, client secret, webhook secret) to a per-agent file.
+Agent names can be supplied either as a file (one per line; lines starting
+with '#' and blank lines are ignored) or as a single name via ``--agent``.
+Both modes accept ``-`` to read from stdin. For each agent, the script
+invokes ``gh app-create create`` which opens a browser tab to confirm
+creation on GitHub, then writes the resulting credentials (app id, private
+key, client id, client secret, webhook secret) to a per-agent file.
 """
 
 from __future__ import annotations
@@ -17,8 +19,32 @@ import sys
 from pathlib import Path
 
 
+def _resolve_names(value: str) -> list[str]:
+    """Resolve a name source into a list of names.
+
+    If ``value`` is '-', read names from stdin (one per line; '#' comments
+    and blanks are skipped). Otherwise return ``[value]`` as a single
+    literal name.
+    """
+    if value == "-":
+        names: list[str] = []
+        for raw in sys.stdin.read().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            names.append(line)
+        return names
+    return [value]
+
+
 def parse_agent_names(path: Path) -> list[str]:
-    """Read agent names from ``path``; skip blanks and ``#`` comments."""
+    """Read agent names from ``path``; skip blanks and ``#`` comments.
+
+    If ``path`` is '-', read from stdin instead.
+    """
+    if str(path) == "-":
+        return _resolve_names("-")
+
     if not path.is_file():
         raise SystemExit(f"Agents file not found: {path}")
 
@@ -104,8 +130,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "agents_file",
         type=Path,
+        nargs="?",
         help="Path to a file with one agent name per line. "
-             "Lines starting with '#' and blank lines are ignored.",
+             "Lines starting with '#' and blank lines are ignored. "
+             "Pass '-' to read from stdin. Mutually exclusive with --agent.",
+    )
+    parser.add_argument(
+        "--agent",
+        help="Create a single app for this agent name instead of reading "
+             "from a file. Pass '-' to read the name from stdin. "
+             "Mutually exclusive with the positional agents_file argument.",
     )
     parser.add_argument(
         "--org", required=True,
@@ -153,15 +187,29 @@ def main(argv: list[str] | None = None) -> int:
     if not shutil.which("gh"):
         raise SystemExit("gh CLI not found in PATH")
 
+    if args.agent is not None and args.agents_file is not None:
+        raise SystemExit("--agent and agents_file are mutually exclusive")
+
+    if args.agent is not None:
+        names = _resolve_names(args.agent)
+        source_desc = "stdin" if args.agent == "-" else "--agent"
+    else:
+        if args.agents_file is None:
+            raise SystemExit(
+                "Provide either an agents_file path or --agent NAME "
+                "(use '-' in either position to read from stdin)"
+            )
+        names = parse_agent_names(args.agents_file)
+        source_desc = "stdin" if str(args.agents_file) == "-" else str(args.agents_file)
+
     if not args.skip_extension_check:
         ensure_extension(args.extension)
 
-    names = parse_agent_names(args.agents_file)
     print(
         f"Creating {len(names)} app(s) in org '{args.org}' "
         f"using preset '{args.preset}'"
         + (f" with prefix '{args.prefix}'" if args.prefix else "")
-        + ":"
+        + f" (source: {source_desc}):"
     )
     for n in names:
         print(f"  - {args.prefix}{n}")
