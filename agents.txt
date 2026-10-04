@@ -1,8 +1,7 @@
 # One agent name per line. Lines starting with '#' and blank lines
 # are ignored. Rename these to match your real hermes agents.
-nexus
-savant
-aetherline
-scribe
-archive
 forge
+atlas
+orion
+vega
+zephyr
