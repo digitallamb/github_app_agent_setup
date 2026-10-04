@@ -1,0 +1,14 @@
+# Credentials — contains private keys, client secrets, webhook secrets
+.creds/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Local environment files
+.env
+.env.*
+!.env.example
