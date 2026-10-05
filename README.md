@@ -8,6 +8,10 @@ comments) and its credentials are written to a per-agent file. The
 preset and every other parameter are configurable — see the flags table
 below.
 
+> **v0.2.0** adds consumer adapters (currently `hermes`), `--verify`,
+> `--resume`, `--json`, and `--no-input` — see
+> [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
+
 ## Why GitHub Apps for agents
 
 Most ad-hoc agent setups reach for personal access tokens (PATs) or a single shared bot account. Both have sharp edges at fleet scale. A dedicated GitHub App per agent is a better default:
