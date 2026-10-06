@@ -487,6 +487,35 @@ def _apply_consumers(
     return True, "ok"
 
 
+def _install_helper_script(agent_profile: str, repo_root: Path | None = None) -> tuple[bool, str]:
+    """Drop the github-app-git-auth skill's helper into the agent's runtime.
+
+    Returns (ok, message). The source is `skill/github-app-git-auth/scripts/github_auth.py`
+    relative to the repo root. The destination is
+    `~/.hermes/profiles/<agent>/scripts/github_auth.py`. Creates `scripts/`
+    if it doesn't exist.
+    """
+    if repo_root is None:
+        # Repo root is the parent of the create_agent_apps.py file
+        repo_root = Path(__file__).resolve().parent
+
+    src = repo_root / "skill" / "github-app-git-auth" / "scripts" / "github_auth.py"
+    if not src.is_file():
+        return False, f"helper script not found at {src} (is the skill folder shipped?)"
+
+    dest_dir = Path(f"/home/hermes/.hermes/profiles/{agent_profile}/scripts")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "github_auth.py"
+
+    try:
+        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        os.chmod(dest, 0o755)
+    except OSError as e:
+        return False, f"can't write {dest}: {e}"
+
+    return True, f"installed {dest}"
+
+
 def _verify_consumers(
     output_file: Path,
     full_name: str,
@@ -605,6 +634,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--install", action="store_true",
+        help=(
+            "After creating the App and adapting credentials, also drop "
+            "the github-app-git-auth skill's helper script into the agent's "
+            "scripts/ directory (~/.hermes/profiles/<name>/scripts/github_auth.py). "
+            "This is the consumption half of the per-agent setup: the agent "
+            "can then run `git push` authenticated as its App. "
+            "Implied when --consumers hermes is used together with --verify."
+        ),
+    )
+    parser.add_argument(
         "--resume", action="store_true",
         help=(
             "Skip agents that have already been created successfully in a "
@@ -669,6 +709,9 @@ def main(argv: list[str] | None = None) -> int:
     consumers = [CONSUMERS[c] for c in args.consumers]
     # --verify is implicit if any consumer has a verify hook
     wants_verify = args.verify or any(c.verify is not None for c in consumers)
+    # --install is implicit when --consumers hermes + --verify are both set
+    # (because at that point the agent is fully ready and the helper completes the loop)
+    wants_install = args.install or (args.verify and any(c.name == "hermes" for c in consumers))
 
     # In --json mode, all human chatter goes to stderr so stdout is a
     # single parseable JSON object. We swap sys.stdout to sys.stderr
@@ -778,6 +821,18 @@ def main(argv: list[str] | None = None) -> int:
                     state.get("failed", {}).pop(name, None)
                     _save_state(output_dir, state)
 
+                # Install helper script into the agent's runtime
+                install_msg = ""
+                if wants_install and not args.dry_run:
+                    ok, install_msg = _install_helper_script(name)
+                    if not ok:
+                        # Not fatal — the agent can still install later. Record
+                        # but don't fail the whole run.
+                        if not args.json_output:
+                            print(f"    [warn] {install_msg}")
+                    elif not args.json_output:
+                        print(f"    {install_msg}")
+
                 results[name] = {
                     "ok": True,
                     "stage": "done",
@@ -785,6 +840,7 @@ def main(argv: list[str] | None = None) -> int:
                     "output_file": str(output_file),
                     "consumers": [c.name for c in consumers],
                     "verify": verify_msg,
+                    "install": install_msg,
                 }
 
             # ---- Final output ----
@@ -801,6 +857,7 @@ def main(argv: list[str] | None = None) -> int:
                 ],
                 "consumers": [c.name for c in consumers],
                 "verify": wants_verify,
+                "install": wants_install,
                 "resume": args.resume,
             }
             print(json.dumps(summary, indent=2, sort_keys=True))

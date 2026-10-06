@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-04
+
+### Added
+
+- **`skill/github-app-git-auth/` directory** containing the consumption
+  half of the per-agent GitHub App workflow: a `SKILL.md` with the
+  full per-host recipe, a `scripts/github_auth.py` helper that
+  mints short-lived installation tokens and hands them to git via a
+  one-shot askpass script, and two `references/` docs (the env
+  contract, and a decision tree for App vs. PAT vs. SSH key auth).
+- **`--install` flag** on `create_agent_apps.py` that copies the
+  helper script into the agent's runtime at
+  `~/.hermes/profiles/<agent>/scripts/github_auth.py`. Implied
+  when `--consumers hermes --verify` are both set.
+- **`install` field in the `--json` output** (boolean: was install
+  requested) and per-agent `install` field (string: install path or
+  warning message).
+- **9 new pytest tests** in `tests/test_install.py` covering: the
+  install function's happy path, mkdir-if-missing behavior,
+  graceful failure when the skill folder is missing, the
+  `--install` flag's CLI surface, the implicit-install logic
+  (consumers+verify implies install), dry-run doesn't write, the
+  helper's import-cleanliness, and the helper's CLI entry point.
+
+### Changed
+
+- **README** now leads with a "Two Halves: Creation + Consumption"
+  section that frames the tool + skill as one workflow, and adds
+  a "For New Host Operators" section with the standalone install
+  command for users who already have Apps but need to wire up a
+  fresh host.
+- **JSON output example** in README updated to include the new
+  `install` field.
+
 ## [0.2.0] - 2026-10-04
 
 ### Added

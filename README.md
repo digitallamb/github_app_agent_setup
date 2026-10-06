@@ -12,6 +12,25 @@ below.
 > `--resume`, `--json`, and `--no-input` — see
 > [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
+## Two Halves: Creation + Consumption
+
+This repo handles **both halves** of the per-agent GitHub App workflow:
+
+| Half | What | Where |
+| --- | --- | --- |
+| **Creation** | Generate the App, populate `.env` | `create_agent_apps.py` (the tool) |
+| **Consumption** | Let the agent use the App for git operations | `skill/github-app-git-auth/` (the skill) |
+
+The `--install` flag on `create_agent_apps.py` drops the consumption half into the agent's runtime automatically — one command does both halves:
+
+```sh
+# Full setup in one go: create the App, populate .env, install the helper
+python3 create_agent_apps.py --org <your-org> --agent <agent-name> \
+    --consumers hermes --verify
+```
+
+After this command runs, the agent can `git push` and `git pull` authenticated as its own GitHub App. See [`skill/github-app-git-auth/SKILL.md`](skill/github-app-git-auth/SKILL.md) for the full per-host recipe.
+
 ## Why GitHub Apps for agents
 
 Most ad-hoc agent setups reach for personal access tokens (PATs) or a single shared bot account. Both have sharp edges at fleet scale. A dedicated GitHub App per agent is a better default:
@@ -121,6 +140,20 @@ you to install each App and paste the resulting install URL, and (if
 PyJWT is installed) verifies the App is usable end-to-end before moving
 on to the next agent.
 
+**Full per-agent setup in one command** (creation + consumption):
+
+```sh
+python3 create_agent_apps.py --org <your-org> --agent <agent-name> \
+    --consumers hermes --verify
+```
+
+This creates the App, populates `.env`, verifies auth, AND drops the
+`github_auth.py` helper into the agent's runtime at
+`~/.hermes/profiles/<agent>/scripts/github_auth.py`. After this single
+command, the agent can `git push` and `git pull` authenticated as its
+own GitHub App. See [`skill/github-app-git-auth/SKILL.md`](skill/github-app-git-auth/SKILL.md)
+for the per-host recipe.
+
 **Resuming an interrupted batch:**
 
 ```sh
@@ -156,6 +189,7 @@ stderr.
 | `--consumers` | Adapt credentials for a specific agent harness (repeatable). Supported: `hermes`. |
 | `--verify` | After creation, mint a JWT and call `/app` (and `/app/installations/{id}/access_tokens` if an install ID is present) to confirm the App is usable end-to-end. Implied by `--consumers` when the consumer has a `verify` hook. |
 | `--no-input` | Skip interactive prompts (e.g. the install-URL collection step in `--consumers hermes`). Useful for CI. |
+| `--install` | Drop the `skill/github-app-git-auth/scripts/github_auth.py` helper into the agent's runtime (`~/.hermes/profiles/<agent>/scripts/`). Implied when `--consumers hermes --verify` are both set. The consumption half of per-agent setup. |
 | `--resume` | Skip agents that have already been created successfully in a previous run (tracked in `<output-dir>/.state.json`). Failed agents are retried; successful ones are not re-created. |
 | `--json` | Emit a single JSON object to stdout at the end summarising the run. Human chatter goes to stderr. Useful for CI. |
 
@@ -171,6 +205,7 @@ In `--json` mode, stdout is a single JSON object shaped like:
 {
   "consumers": ["hermes"],
   "failed": [],
+  "install": true,
   "resume": false,
   "succeeded": ["savant"],
   "verify": true
@@ -179,6 +214,36 @@ In `--json` mode, stdout is a single JSON object shaped like:
 
 `failed` entries are objects with `name`, `ok: false`, `stage` (one of
 `create`, `read`, `adapt`, `verify`), and a human-readable `message`.
+
+## For New Host Operators
+
+If you've already created the Apps (using this tool or otherwise) and
+now need to configure a fresh host so an agent can use them, install
+the consumption-side helper directly from this repo:
+
+```sh
+# Clone the repo (or just copy the skill folder)
+git clone https://github.com/digitallamb/github_app_agent_setup.git
+
+# Install the helper into a specific agent's runtime
+python3 -c "
+import shutil
+from pathlib import Path
+shutil.copy(
+    'github_app_agent_setup/skill/github-app-git-auth/scripts/github_auth.py',
+    Path.home() / '.hermes/profiles/<agent-name>/scripts/github_auth.py'
+)
+"
+
+# Verify it works
+python3 ~/.hermes/profiles/<agent-name>/scripts/github_auth.py --verify <agent-name>
+```
+
+Or use the `--install` flag of `create_agent_apps.py` to do this
+automatically as part of the creation flow (see **Two Halves** above).
+
+Full per-host recipe in
+[`skill/github-app-git-auth/SKILL.md`](skill/github-app-git-auth/SKILL.md).
 
 ## Security
 
